@@ -145,6 +145,7 @@ Status BaseBetaRowsetWriter::init(const RowsetWriterContext& rowset_writer_conte
     _rowset_meta->set_rowset_type(_context.rowset_type);
     _rowset_meta->set_rowset_state(_context.rowset_state);
     _rowset_meta->set_segments_overlap(_context.segments_overlap);
+    _rowset_meta->set_commit_id(_context.commit_id);
     if (_context.rowset_state == PREPARED || _context.rowset_state == COMMITTED) {
         _is_pending = true;
         _rowset_meta->set_txn_id(_context.txn_id);

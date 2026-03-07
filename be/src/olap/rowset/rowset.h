@@ -168,6 +168,7 @@ public:
     KeysType keys_type() { return _schema->keys_type(); }
     RowsetStatePB rowset_meta_state() const { return rowset_meta()->rowset_state(); }
     bool produced_by_compaction() const { return rowset_meta()->produced_by_compaction(); }
+    CommitId commit_id() const { return rowset_meta()->commit_id(); }
 
     // remove all files in this rowset
     // TODO should we rename the method to remove_files() to be more specific?

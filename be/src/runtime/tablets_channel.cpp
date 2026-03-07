@@ -234,6 +234,14 @@ Status BaseTabletsChannel::incremental_open(const PTabletWriterOpenRequest& para
         wrequest.slots = index_slots;
         wrequest.is_high_priority = _is_high_priority;
         wrequest.table_schema_param = _schema;
+        if (params.has_commit_id()) {
+            if (params.commit_id().has_start()) {
+                wrequest.commit_id.update_with(params.commit_id().start());
+            }
+            if (params.commit_id().has_end()) {
+                wrequest.commit_id.update_with(params.commit_id().end());
+            }
+        }
 
         // TODO(plat1ko): CloudDeltaWriter
         auto delta_writer = std::make_unique<DeltaWriter>(*StorageEngine::instance(), &wrequest,
@@ -505,6 +513,14 @@ Status BaseTabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& req
                 .is_high_priority = _is_high_priority,
                 .write_file_cache = request.write_file_cache(),
         };
+        if (request.has_commit_id()) {
+            if (request.commit_id().has_start()) {
+                wrequest.commit_id.update_with(request.commit_id().start());
+            }
+            if (request.commit_id().has_end()) {
+                wrequest.commit_id.update_with(request.commit_id().end());
+            }
+        }
 
         // TODO(plat1ko): CloudDeltaWriter
         auto writer = std::make_unique<DeltaWriter>(*StorageEngine::instance(), &wrequest, _profile,

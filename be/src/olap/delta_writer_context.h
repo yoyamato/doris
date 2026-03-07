@@ -23,6 +23,8 @@
 
 #include <vector>
 
+#include "olap/olap_common.h"
+
 namespace doris {
 
 class TupleDescriptor;
@@ -42,6 +44,7 @@ struct WriteRequest {
     std::shared_ptr<OlapTableSchemaParam> table_schema_param = nullptr;
     bool is_high_priority = false;
     bool write_file_cache = false;
+    CommitId commit_id;
 };
 
 } // namespace doris

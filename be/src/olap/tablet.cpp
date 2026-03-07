@@ -1510,14 +1510,23 @@ std::vector<RowsetSharedPtr> Tablet::pick_candidate_rowsets_to_build_inverted_in
     return candidate_rowsets;
 }
 
+
+static std::string _commit_id_to_string(const CommitId& commit_id) {
+    if (!commit_id.has_value) {
+        return "N/A";
+    }
+    return fmt::format("[{},{}]", commit_id.start, commit_id.end);
+}
+
 std::string Tablet::_get_rowset_info_str(RowsetSharedPtr rowset, bool delete_flag) {
     const Version& ver = rowset->version();
     std::string disk_size = PrettyPrinter::print(
             static_cast<uint64_t>(rowset->rowset_meta()->total_disk_size()), TUnit::BYTES);
-    return strings::Substitute("[$0-$1] $2 $3 $4 $5 $6", ver.first, ver.second,
+    return strings::Substitute("[$0-$1] $2 $3 $4 $5 $6 commit_id=$7", ver.first, ver.second,
                                rowset->num_segments(), (delete_flag ? "DELETE" : "DATA"),
                                SegmentsOverlapPB_Name(rowset->rowset_meta()->segments_overlap()),
-                               rowset->rowset_id().to_string(), disk_size);
+                               rowset->rowset_id().to_string(), disk_size,
+                               _commit_id_to_string(rowset->commit_id()));
 }
 
 std::tuple<int64_t, int64_t> Tablet::get_visible_version_and_time() const {
@@ -1674,8 +1683,9 @@ void Tablet::get_compaction_status(std::string* json_result) {
                 static_cast<uint64_t>(stale_rowsets[i]->rowset_meta()->total_disk_size()),
                 TUnit::BYTES);
         std::string version_str = strings::Substitute(
-                "[$0-$1] $2 $3 $4", ver.first, ver.second, stale_rowsets[i]->num_segments(),
-                stale_rowsets[i]->rowset_id().to_string(), disk_size);
+                "[$0-$1] $2 $3 $4 commit_id=$5", ver.first, ver.second,
+                stale_rowsets[i]->num_segments(), stale_rowsets[i]->rowset_id().to_string(),
+                disk_size, _commit_id_to_string(stale_rowsets[i]->commit_id()));
         value.SetString(version_str.c_str(), version_str.length(),
                         stale_versions_arr.GetAllocator());
         stale_versions_arr.PushBack(value, stale_versions_arr.GetAllocator());

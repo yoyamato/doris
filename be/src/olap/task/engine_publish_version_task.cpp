@@ -17,6 +17,8 @@
 
 #include "olap/task/engine_publish_version_task.h"
 
+#include <fmt/format.h>
+
 #include <gen_cpp/AgentService_types.h>
 #include <gen_cpp/olap_file.pb.h>
 #include <util/defer_op.h>
@@ -453,11 +455,16 @@ void TabletPublishTxnTask::handle() {
     int64_t cost_us = MonotonicMicros() - _stats.submit_time_us;
     g_tablet_publish_latency << cost_us;
     _stats.record_in_bvar();
+    const auto commit_id = _rowset->commit_id();
     LOG(INFO) << "publish version successfully on tablet"
               << ", table_id=" << _tablet->table_id() << ", tablet=" << _tablet->tablet_id()
               << ", transaction_id=" << _transaction_id << ", version=" << _version.first
-              << ", num_rows=" << _rowset->num_rows() << ", res=" << _result
-              << ", cost: " << cost_us << "(us) "
+              << ", num_rows=" << _rowset->num_rows()
+              << ", commit_id="
+              << (commit_id.has_value
+                          ? fmt::format("[{},{}]", commit_id.start, commit_id.end)
+                          : "N/A")
+              << ", res=" << _result << ", cost: " << cost_us << "(us) "
               << (cost_us > 500 * 1000 ? _stats.to_string() : "");
 
     _result = Status::OK();

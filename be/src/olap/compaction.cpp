@@ -783,6 +783,7 @@ Status Compaction::do_compaction_impl(int64_t permits) {
 
     auto cumu_policy = _tablet->cumulative_compaction_policy();
     DCHECK(cumu_policy);
+    const auto output_commit_id = _output_rowset->commit_id();
     LOG(INFO) << "succeed to do " << compaction_name() << " is_vertical=" << vertical_compaction
               << ". tablet=" << _tablet->tablet_id() << ", output_version=" << _output_version
               << ", current_max_version=" << current_max_version
@@ -793,6 +794,10 @@ Status Compaction::do_compaction_impl(int64_t permits) {
               << ", output_row_num=" << _output_rowset->num_rows()
               << ", filtered_row_num=" << stats.filtered_rows
               << ", merged_row_num=" << stats.merged_rows
+              << ", output_commit_id="
+              << (output_commit_id.has_value
+                          ? fmt::format("[{},{}]", output_commit_id.start, output_commit_id.end)
+                          : "N/A")
               << ". elapsed time=" << watch.get_elapse_second()
               << "s. cumulative_compaction_policy=" << cumu_policy->name()
               << ", compact_row_per_second=" << int(_input_row_num / watch.get_elapse_second());
@@ -806,6 +811,9 @@ Status Compaction::construct_output_rowset_writer(RowsetWriterContext& ctx, bool
     ctx.segments_overlap = NONOVERLAPPING;
     ctx.tablet_schema = _cur_tablet_schema;
     ctx.newest_write_timestamp = _newest_write_timestamp;
+    for (const auto& input_rowset : _input_rowsets) {
+        ctx.commit_id.merge(input_rowset->commit_id());
+    }
     ctx.write_type = DataWriteType::TYPE_COMPACTION;
     if (config::inverted_index_compaction_enable &&
         (((_tablet->keys_type() == KeysType::UNIQUE_KEYS &&

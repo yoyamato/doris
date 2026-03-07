@@ -58,6 +58,11 @@ message KeyBoundsPB {
     required bytes max_key = 2;
 }
 
+message CommitIdPB {
+    optional int64 start = 1;
+    optional int64 end = 2;
+}
+
 message RowsetMetaPB {
     required int64 rowset_id = 1; // Deprecated. Use rowset_id_v2 instead.
     optional int64 partition_id = 2;
@@ -114,6 +119,7 @@ message RowsetMetaPB {
     // to indicate whether the data between the segments overlap
     optional SegmentsOverlapPB segments_overlap_pb = 51 [default = OVERLAP_UNKNOWN];
     optional int64 compaction_level = 52 [default = 0];
+    optional CommitIdPB commit_id = 53;
 }
 
 message SegmentStatisticsPB {

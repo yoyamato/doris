@@ -442,6 +442,25 @@ Status StreamLoadAction::_process_put(HttpRequest* http_req,
         request.__set_file_size(ctx->body_bytes);
         ctx->body_sink = file_sink;
     }
+    if (!http_req->header(HTTP_COMMIT_ID_MIN).empty()) {
+        try {
+            request.__set_commit_id_min(std::stoll(http_req->header(HTTP_COMMIT_ID_MIN)));
+        } catch (const std::exception& e) {
+            return Status::InvalidArgument("invalid {}: {}", HTTP_COMMIT_ID_MIN, e.what());
+        }
+    }
+    if (!http_req->header(HTTP_COMMIT_ID_MAX).empty()) {
+        try {
+            request.__set_commit_id_max(std::stoll(http_req->header(HTTP_COMMIT_ID_MAX)));
+        } catch (const std::exception& e) {
+            return Status::InvalidArgument("invalid {}: {}", HTTP_COMMIT_ID_MAX, e.what());
+        }
+    }
+    if (request.__isset.commit_id_min && request.__isset.commit_id_max &&
+        request.commit_id_min > request.commit_id_max) {
+        return Status::InvalidArgument("{} should be <= {}", HTTP_COMMIT_ID_MIN,
+                                       HTTP_COMMIT_ID_MAX);
+    }
     if (!http_req->header(HTTP_COLUMNS).empty()) {
         request.__set_columns(http_req->header(HTTP_COLUMNS));
     }

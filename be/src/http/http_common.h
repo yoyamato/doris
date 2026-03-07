@@ -68,5 +68,7 @@ static const std::string HTTP_LOAD_STREAM_PER_NODE = "load_stream_per_node";
 static const std::string HTTP_WAL_ID_KY = "wal_id";
 static const std::string HTTP_AUTH_CODE = "auth_code";
 static const std::string HTTP_GROUP_COMMIT = "group_commit";
+static const std::string HTTP_COMMIT_ID_MIN = "commit_id_min";
+static const std::string HTTP_COMMIT_ID_MAX = "commit_id_max";
 
 } // namespace doris
