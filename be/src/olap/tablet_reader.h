@@ -94,6 +94,7 @@ public:
         std::vector<RowsetMetaSharedPtr> delete_predicates;
         // Fill delete predicates with `rs_splits`
         void fill_delete_predicates();
+        bool get_visible_commit_id(CommitId* range) const;
     };
     // Params for Reader,
     // mainly include tablet, data version and fetch range.

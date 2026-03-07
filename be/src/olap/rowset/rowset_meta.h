@@ -200,6 +200,32 @@ public:
 
     void set_num_segments(int64_t num_segments) { _rowset_meta_pb.set_num_segments(num_segments); }
 
+    bool has_commit_id() const { return _rowset_meta_pb.has_commit_id(); }
+
+    CommitId commit_id() const {
+        CommitId range;
+        if (!_rowset_meta_pb.has_commit_id()) {
+            return range;
+        }
+        const auto& pb = _rowset_meta_pb.commit_id();
+        if (pb.has_start() && pb.has_end()) {
+            range.has_value = true;
+            range.start = pb.start();
+            range.end = pb.end();
+        }
+        return range;
+    }
+
+    void set_commit_id(const CommitId& range) {
+        if (!range.has_value) {
+            _rowset_meta_pb.clear_commit_id();
+            return;
+        }
+        auto* pb = _rowset_meta_pb.mutable_commit_id();
+        pb->set_start(range.start);
+        pb->set_end(range.end);
+    }
+
     void to_rowset_pb(RowsetMetaPB* rs_meta_pb) const;
 
     RowsetMetaPB get_rowset_pb();

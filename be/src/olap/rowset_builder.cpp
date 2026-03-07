@@ -223,6 +223,7 @@ Status RowsetBuilder::init() {
     context.segments_overlap = OVERLAPPING;
     context.tablet_schema = _tablet_schema;
     context.newest_write_timestamp = UnixSeconds();
+    context.commit_id = _req.commit_id;
     context.tablet_id = _tablet->tablet_id();
     context.tablet = _tablet;
     context.write_type = DataWriteType::TYPE_DIRECT;

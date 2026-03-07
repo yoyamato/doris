@@ -309,6 +309,25 @@ Status HttpStreamAction::process_put(HttpRequest* http_req,
             bool value = iequal(http_req->header(HTTP_MEMTABLE_ON_SINKNODE), "true");
             request.__set_memtable_on_sink_node(value);
         }
+        if (!http_req->header(HTTP_COMMIT_ID_MIN).empty()) {
+            try {
+                request.__set_commit_id_min(std::stoll(http_req->header(HTTP_COMMIT_ID_MIN)));
+            } catch (const std::exception& e) {
+                return Status::InvalidArgument("invalid {}: {}", HTTP_COMMIT_ID_MIN, e.what());
+            }
+        }
+        if (!http_req->header(HTTP_COMMIT_ID_MAX).empty()) {
+            try {
+                request.__set_commit_id_max(std::stoll(http_req->header(HTTP_COMMIT_ID_MAX)));
+            } catch (const std::exception& e) {
+                return Status::InvalidArgument("invalid {}: {}", HTTP_COMMIT_ID_MAX, e.what());
+            }
+        }
+        if (request.__isset.commit_id_min && request.__isset.commit_id_max &&
+            request.commit_id_min > request.commit_id_max) {
+            return Status::InvalidArgument("{} should be <= {}", HTTP_COMMIT_ID_MIN,
+                                           HTTP_COMMIT_ID_MAX);
+        }
     } else {
         request.__set_token(ctx->auth.token);
         request.__set_load_sql(ctx->sql_str);

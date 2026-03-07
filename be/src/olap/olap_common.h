@@ -20,6 +20,7 @@
 #include <gen_cpp/Types_types.h>
 #include <netinet/in.h>
 
+#include <algorithm>
 #include <atomic>
 #include <charconv>
 #include <cstdint>
@@ -115,6 +116,35 @@ struct TabletSize {
 
     TTabletId tablet_id;
     size_t tablet_size;
+};
+
+struct CommitId {
+    bool has_value = false;
+    int64_t start = 0;
+    int64_t end = 0;
+
+    void update_with(int64_t commit_id) {
+        if (!has_value) {
+            has_value = true;
+            start = commit_id;
+            end = commit_id;
+            return;
+        }
+        start = std::min(start, commit_id);
+        end = std::max(end, commit_id);
+    }
+
+    void merge(const CommitId& other) {
+        if (!other.has_value) {
+            return;
+        }
+        if (!has_value) {
+            *this = other;
+            return;
+        }
+        start = std::min(start, other.start);
+        end = std::max(end, other.end);
+    }
 };
 
 // Define all data types supported by Field.

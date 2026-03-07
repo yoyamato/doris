@@ -109,6 +109,23 @@ void TabletReader::ReadSource::fill_delete_predicates() {
     }
 }
 
+
+bool TabletReader::ReadSource::get_visible_commit_id(CommitId* range) const {
+    if (range == nullptr) {
+        return false;
+    }
+    CommitId merged;
+    for (const auto& split : rs_splits) {
+        const auto& rs_meta = split.rs_reader->rowset()->rowset_meta();
+        if (rs_meta->rowset_state() != VISIBLE || !rs_meta->has_commit_id()) {
+            continue;
+        }
+        merged.merge(rs_meta->commit_id());
+    }
+    *range = merged;
+    return merged.has_value;
+}
+
 TabletReader::~TabletReader() {
     VLOG_NOTICE << "merged rows:" << _merged_rows;
     for (auto pred : _col_predicates) {

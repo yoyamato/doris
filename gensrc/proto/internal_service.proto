@@ -57,6 +57,12 @@ message PTransmitDataResult {
     optional int64 receive_time = 2;
 };
 
+
+message PCommitId {
+    optional int64 start = 1;
+    optional int64 end = 2;
+}
+
 message PTabletWithPartition {
     required int64 partition_id = 1;
     required int64 tablet_id = 2;
@@ -99,6 +105,7 @@ message PTabletWriterOpenRequest {
     optional bool is_incremental = 15 [default = false];
     optional int64 txn_expiration = 16; // Absolute time
     optional bool write_file_cache = 17;
+    optional PCommitId commit_id = 18;
     optional int32 sender_id = 19;
 };
 

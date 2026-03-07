@@ -89,6 +89,7 @@ struct RowsetWriterContext {
     DataDir* data_dir = nullptr;
 
     int64_t newest_write_timestamp = -1;
+    CommitId commit_id;
     bool enable_unique_key_merge_on_write = false;
     // store column_unique_id to do index compaction
     std::set<int32_t> columns_to_do_index_compaction;

@@ -728,6 +728,8 @@ struct TStreamLoadPutRequest {
     54: optional bool group_commit // deprecated
     55: optional i32 stream_per_node;
     56: optional string group_commit_mode
+    57: optional i64 commit_id_min
+    58: optional i64 commit_id_max
 }
 
 struct TStreamLoadPutResult {
