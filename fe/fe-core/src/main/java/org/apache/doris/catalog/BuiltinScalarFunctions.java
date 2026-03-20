@@ -421,6 +421,7 @@ import org.apache.doris.nereids.trees.expressions.functions.scalar.ToBitmapWithC
 import org.apache.doris.nereids.trees.expressions.functions.scalar.ToDate;
 import org.apache.doris.nereids.trees.expressions.functions.scalar.ToDateV2;
 import org.apache.doris.nereids.trees.expressions.functions.scalar.ToDays;
+import org.apache.doris.nereids.trees.expressions.functions.scalar.ToYmInterval;
 import org.apache.doris.nereids.trees.expressions.functions.scalar.ToIpv4;
 import org.apache.doris.nereids.trees.expressions.functions.scalar.ToIpv4OrDefault;
 import org.apache.doris.nereids.trees.expressions.functions.scalar.ToIpv4OrNull;
@@ -901,6 +902,7 @@ public class BuiltinScalarFunctions implements FunctionHelper {
             scalar(ToDate.class, "to_date"),
             scalar(ToDateV2.class, "to_datev2"),
             scalar(ToDays.class, "to_days"),
+            scalar(ToYmInterval.class, "to_yminterval"),
             scalar(ToIpv4.class, "to_ipv4"),
             scalar(ToIpv4OrDefault.class, "to_ipv4_or_default"),
             scalar(ToIpv4OrNull.class, "to_ipv4_or_null"),
