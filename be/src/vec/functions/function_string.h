@@ -31,6 +31,7 @@
 #include <iomanip>
 #include <memory>
 #include <ostream>
+#include <regex>
 #include <random>
 #include <sstream>
 #include <tuple>
@@ -3283,6 +3284,64 @@ public:
         }
 
         block.get_by_position(result).column = std::move(res);
+        return Status::OK();
+    }
+};
+
+class FunctionToYmInterval : public IFunction {
+public:
+    static constexpr auto name = "to_yminterval";
+    static FunctionPtr create() { return std::make_shared<FunctionToYmInterval>(); }
+    String get_name() const override { return name; }
+    size_t get_number_of_arguments() const override { return 1; }
+    DataTypePtr get_return_type_impl(const DataTypes& arguments) const override {
+        return make_nullable(std::make_shared<DataTypeString>());
+    }
+
+    Status execute_impl(FunctionContext* context, Block& block, const ColumnNumbers& arguments,
+                        size_t result, size_t input_rows_count) const override {
+        auto null_map = ColumnUInt8::create(input_rows_count, 0);
+        auto res = ColumnString::create();
+        auto& chars = res->get_chars();
+        auto& offsets = res->get_offsets();
+        offsets.reserve(input_rows_count);
+
+        const auto* input_col =
+                assert_cast<const ColumnString*>(block.get_by_position(arguments[0]).column.get());
+        static const std::regex ym_interval_pattern(
+                R"(^\s*([+-])?\s*(\d+)\s*-\s*(\d+)\s*$)", std::regex::optimize);
+
+        for (size_t i = 0; i < input_rows_count; ++i) {
+            auto input = input_col->get_data_at(i).to_string();
+            std::smatch match;
+            if (!std::regex_match(input, match, ym_interval_pattern)) {
+                null_map->get_data()[i] = 1;
+                offsets.push_back(chars.size());
+                continue;
+            }
+
+            int month = std::stoi(match[3].str());
+            if (month < 0 || month > 11) {
+                null_map->get_data()[i] = 1;
+                offsets.push_back(chars.size());
+                continue;
+            }
+
+            std::string normalized;
+            if (match[1].matched) {
+                normalized.append(match[1].str());
+            }
+            normalized.append(match[2].str());
+            normalized.push_back('-');
+            if (month < 10) {
+                normalized.push_back('0');
+            }
+            normalized.append(std::to_string(month));
+            res->insert_data(normalized.data(), normalized.size());
+        }
+
+        block.get_by_position(result).column =
+                ColumnNullable::create(std::move(res), std::move(null_map));
         return Status::OK();
     }
 };
