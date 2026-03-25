@@ -64,6 +64,196 @@ static bool check_date_punct(char ch) {
     return UNLIKELY(!(isdigit(ch) || isalpha(ch)));
 }
 
+static bool parse_i64_token(std::string_view s, int64_t* v) {
+    if (s.empty()) {
+        return false;
+    }
+    int64_t value = 0;
+    for (char c : s) {
+        if (c < '0' || c > '9') {
+            return false;
+        }
+        value = value * 10 + (c - '0');
+    }
+    *v = value;
+    return true;
+}
+
+static bool split_once(std::string_view s, char delim, std::string_view* left, std::string_view* right) {
+    size_t pos = s.find(delim);
+    if (pos == std::string_view::npos) {
+        return false;
+    }
+    *left = s.substr(0, pos);
+    *right = s.substr(pos + 1);
+    return true;
+}
+
+static bool parse_microseconds(std::string_view s, int64_t* micros) {
+    if (s.empty() || s.size() > 6) {
+        return false;
+    }
+    int64_t v = 0;
+    for (char c : s) {
+        if (c < '0' || c > '9') {
+            return false;
+        }
+        v = v * 10 + (c - '0');
+    }
+    for (size_t i = s.size(); i < 6; ++i) {
+        v *= 10;
+    }
+    *micros = v;
+    return true;
+}
+
+bool parse_mysql_interval(TimeUnit unit, std::string_view expr, TimeInterval* interval) {
+    if (interval == nullptr) {
+        return false;
+    }
+    *interval = TimeInterval();
+    while (!expr.empty() && check_space(expr.front())) {
+        expr.remove_prefix(1);
+    }
+    while (!expr.empty() && check_space(expr.back())) {
+        expr.remove_suffix(1);
+    }
+    if (expr.empty()) {
+        return false;
+    }
+
+    bool neg = false;
+    if (expr.front() == '-' || expr.front() == '+') {
+        neg = expr.front() == '-';
+        expr.remove_prefix(1);
+    }
+    while (!expr.empty() && check_space(expr.front())) {
+        expr.remove_prefix(1);
+    }
+    if (expr.empty()) {
+        return false;
+    }
+    interval->is_neg = neg;
+
+    auto parse_two_part_time = [&](std::string_view s, int64_t* a, int64_t* b) -> bool {
+        std::string_view l;
+        std::string_view r;
+        return split_once(s, ':', &l, &r) && parse_i64_token(l, a) && parse_i64_token(r, b);
+    };
+
+    switch (unit) {
+    case YEAR:
+        return parse_i64_token(expr, &interval->year);
+    case QUARTER:
+        if (!parse_i64_token(expr, &interval->month)) {
+            return false;
+        }
+        interval->month *= 3;
+        return true;
+    case MONTH:
+        return parse_i64_token(expr, &interval->month);
+    case WEEK:
+        if (!parse_i64_token(expr, &interval->day)) {
+            return false;
+        }
+        interval->day *= 7;
+        return true;
+    case DAY:
+        return parse_i64_token(expr, &interval->day);
+    case HOUR:
+        return parse_i64_token(expr, &interval->hour);
+    case MINUTE:
+        return parse_i64_token(expr, &interval->minute);
+    case SECOND:
+        return parse_i64_token(expr, &interval->second);
+    case MICROSECOND:
+        return parse_i64_token(expr, &interval->microsecond);
+    case SECOND_MICROSECOND: {
+        std::string_view s;
+        std::string_view us;
+        return split_once(expr, '.', &s, &us) && parse_i64_token(s, &interval->second) &&
+               parse_microseconds(us, &interval->microsecond);
+    }
+    case MINUTE_SECOND:
+        return parse_two_part_time(expr, &interval->minute, &interval->second);
+    case HOUR_MINUTE:
+        return parse_two_part_time(expr, &interval->hour, &interval->minute);
+    case HOUR_SECOND: {
+        std::string_view h;
+        std::string_view ms;
+        std::string_view m;
+        std::string_view s;
+        return split_once(expr, ':', &h, &ms) && split_once(ms, ':', &m, &s) &&
+               parse_i64_token(h, &interval->hour) && parse_i64_token(m, &interval->minute) &&
+               parse_i64_token(s, &interval->second);
+    }
+    case HOUR_MICROSECOND: {
+        std::string_view h;
+        std::string_view msp;
+        std::string_view m;
+        std::string_view sp;
+        std::string_view s;
+        std::string_view us;
+        return split_once(expr, ':', &h, &msp) && split_once(msp, ':', &m, &sp) &&
+               split_once(sp, '.', &s, &us) && parse_i64_token(h, &interval->hour) &&
+               parse_i64_token(m, &interval->minute) && parse_i64_token(s, &interval->second) &&
+               parse_microseconds(us, &interval->microsecond);
+    }
+    case DAY_HOUR: {
+        std::string_view d;
+        std::string_view h;
+        return split_once(expr, ' ', &d, &h) && parse_i64_token(d, &interval->day) &&
+               parse_i64_token(h, &interval->hour);
+    }
+    case DAY_MINUTE: {
+        std::string_view d;
+        std::string_view hm;
+        std::string_view h;
+        std::string_view m;
+        return split_once(expr, ' ', &d, &hm) && split_once(hm, ':', &h, &m) &&
+               parse_i64_token(d, &interval->day) && parse_i64_token(h, &interval->hour) &&
+               parse_i64_token(m, &interval->minute);
+    }
+    case DAY_SECOND: {
+        std::string_view d;
+        std::string_view hms;
+        std::string_view h;
+        std::string_view ms;
+        std::string_view m;
+        std::string_view s;
+        return split_once(expr, ' ', &d, &hms) && split_once(hms, ':', &h, &ms) &&
+               split_once(ms, ':', &m, &s) && parse_i64_token(d, &interval->day) &&
+               parse_i64_token(h, &interval->hour) && parse_i64_token(m, &interval->minute) &&
+               parse_i64_token(s, &interval->second);
+    }
+    case DAY_MICROSECOND: {
+        std::string_view d;
+        std::string_view hmsp;
+        std::string_view h;
+        std::string_view msp;
+        std::string_view m;
+        std::string_view sp;
+        std::string_view s;
+        std::string_view us;
+        return split_once(expr, ' ', &d, &hmsp) && split_once(hmsp, ':', &h, &msp) &&
+               split_once(msp, ':', &m, &sp) && split_once(sp, '.', &s, &us) &&
+               parse_i64_token(d, &interval->day) && parse_i64_token(h, &interval->hour) &&
+               parse_i64_token(m, &interval->minute) && parse_i64_token(s, &interval->second) &&
+               parse_microseconds(us, &interval->microsecond);
+    }
+    case YEAR_MONTH: {
+        std::string_view y;
+        std::string_view mon;
+        return split_once(expr, '-', &y, &mon) && parse_i64_token(y, &interval->year) &&
+               parse_i64_token(mon, &interval->month);
+    }
+    case MILLISECOND:
+        return parse_i64_token(expr, &interval->millisecond);
+    default:
+        return false;
+    }
+}
+
 static bool time_zone_begins(const char* ptr, const char* end) {
     return *ptr == '+' || (*ptr == '-' && ptr + 3 < end && *(ptr + 3) == ':') ||
            (isalpha(*ptr) && *ptr != 'T');

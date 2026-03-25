@@ -468,7 +468,7 @@ public class ExpressionAnalyzer extends SubExprAnalyzer<ExpressionRewriteContext
         String funcOpName;
         if (arithmetic.getFuncName() == null) {
             // e.g. YEARS_ADD, MONTHS_SUB
-            funcOpName = String.format("%sS_%s", arithmetic.getTimeUnit(),
+            funcOpName = String.format("%s_%s", arithmetic.getTimeUnit().functionNamePrefix(),
                     (arithmetic.getOp() == Operator.ADD) ? "ADD" : "SUB");
         } else {
             funcOpName = arithmetic.getFuncName();

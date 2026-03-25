@@ -71,7 +71,19 @@ public class Interval extends Expression implements LeafExpression, AlwaysNotNul
         DAY("DAY", false, 400),
         HOUR("HOUR", true, 300),
         MINUTE("MINUTE", true, 200),
-        SECOND("SECOND", true, 100);
+        SECOND("SECOND", true, 100),
+        MICROSECOND("MICROSECOND", true, 90),
+        SECOND_MICROSECOND("SECOND_MICROSECOND", true, 80),
+        MINUTE_MICROSECOND("MINUTE_MICROSECOND", true, 70),
+        MINUTE_SECOND("MINUTE_SECOND", true, 60),
+        HOUR_MICROSECOND("HOUR_MICROSECOND", true, 50),
+        HOUR_SECOND("HOUR_SECOND", true, 40),
+        HOUR_MINUTE("HOUR_MINUTE", true, 30),
+        DAY_MICROSECOND("DAY_MICROSECOND", true, 20),
+        DAY_SECOND("DAY_SECOND", true, 19),
+        DAY_MINUTE("DAY_MINUTE", true, 18),
+        DAY_HOUR("DAY_HOUR", true, 17),
+        YEAR_MONTH("YEAR_MONTH", false, 16);
 
         private final String description;
         private final boolean isDateTimeUnit;
@@ -88,6 +100,30 @@ public class Interval extends Expression implements LeafExpression, AlwaysNotNul
 
         public boolean isDateTimeUnit() {
             return isDateTimeUnit;
+        }
+
+        public boolean isCompositeUnit() {
+            return this == SECOND_MICROSECOND || this == MINUTE_MICROSECOND || this == MINUTE_SECOND
+                    || this == HOUR_MICROSECOND || this == HOUR_SECOND || this == HOUR_MINUTE
+                    || this == DAY_MICROSECOND || this == DAY_SECOND || this == DAY_MINUTE
+                    || this == DAY_HOUR || this == YEAR_MONTH;
+        }
+
+        public String functionNamePrefix() {
+            switch (this) {
+                case YEAR:
+                case MONTH:
+                case QUARTER:
+                case WEEK:
+                case DAY:
+                case HOUR:
+                case MINUTE:
+                case SECOND:
+                case MICROSECOND:
+                    return this + "S";
+                default:
+                    return this.toString();
+            }
         }
 
         public int getLevel() {
