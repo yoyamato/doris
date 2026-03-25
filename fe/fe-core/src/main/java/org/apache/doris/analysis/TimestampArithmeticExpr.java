@@ -25,8 +25,6 @@ import org.apache.doris.catalog.ScalarType;
 import org.apache.doris.catalog.Type;
 import org.apache.doris.common.AnalysisException;
 import org.apache.doris.common.Config;
-import org.apache.doris.common.ErrorCode;
-import org.apache.doris.common.ErrorReport;
 import org.apache.doris.thrift.TExprNode;
 import org.apache.doris.thrift.TExprNodeType;
 import org.apache.doris.thrift.TExprOpcode;
@@ -257,8 +255,18 @@ public class TimestampArithmeticExpr extends Expr {
                         "the second argument must be a scalar type. but it is " + getChild(1).toSql());
             }
 
-            // The second child must be of type 'INT' or castable to it.
-            if (!getChild(1).getType().isScalarType(PrimitiveType.INT)) {
+            if (timeUnit.isCompositeUnit()) {
+                if (!getChild(1).getType().isStringType()) {
+                    if (!ScalarType.canCastTo((ScalarType) getChild(1).getType(), Type.VARCHAR)) {
+                        throw new AnalysisException("Operand '" + getChild(1).toSql()
+                                + "' of timestamp arithmetic expression '" + toSql() + "' returns type '"
+                                + getChild(1).getType()
+                                + "' which is incompatible with expected type 'STRING'.");
+                    }
+                    castChild(Type.VARCHAR, 1);
+                }
+            } else if (!getChild(1).getType().isScalarType(PrimitiveType.INT)) {
+                // The second child must be of type 'INT' or castable to it.
                 if (!ScalarType.canCastTo((ScalarType) getChild(1).getType(), Type.INT)) {
                     throw new AnalysisException("Operand '" + getChild(1).toSql()
                             + "' of timestamp arithmetic expression '" + toSql() + "' returns type '"
@@ -269,7 +277,8 @@ public class TimestampArithmeticExpr extends Expr {
 
             type = dateType;
             opcode = getOpCode();
-            funcOpName = String.format("%sS_%s", timeUnit,
+            String unitName = timeUnit.functionNamePrefix();
+            funcOpName = String.format("%s_%s", unitName,
                     (op == ArithmeticExpr.Operator.ADD) ? "ADD" : "SUB");
         }
 
@@ -356,11 +365,17 @@ public class TimestampArithmeticExpr extends Expr {
                     return TExprOpcode.TIMESTAMP_SECONDS_SUB;
                 }
             }
+            case MICROSECOND: {
+                if (op == Operator.ADD) {
+                    return TExprOpcode.TIMESTAMP_MICROSECONDS_ADD;
+                } else {
+                    return TExprOpcode.TIMESTAMP_MICROSECONDS_SUB;
+                }
+            }
             default: {
-                ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_TIMEUNIT, timeUnit);
+                return TExprOpcode.INVALID_OPCODE;
             }
         }
-        return null;
     }
 
     @Override
@@ -468,10 +483,31 @@ public class TimestampArithmeticExpr extends Expr {
         }
 
         public boolean isDateTime() {
-            if (this == HOUR || this == MINUTE || this == SECOND || this == MICROSECOND) {
-                return true;
+            return this == HOUR || this == MINUTE || this == SECOND || this == MICROSECOND
+                    || isCompositeUnit();
+        }
+
+        public boolean isCompositeUnit() {
+            return this == SECOND_MICROSECOND || this == MINUTE_MICROSECOND || this == MINUTE_SECOND
+                    || this == HOUR_MICROSECOND || this == HOUR_SECOND || this == HOUR_MINUTE
+                    || this == DAY_MICROSECOND || this == DAY_SECOND || this == DAY_MINUTE
+                    || this == DAY_HOUR || this == YEAR_MONTH;
+        }
+
+        public String functionNamePrefix() {
+            switch (this) {
+                case YEAR:
+                case MONTH:
+                case WEEK:
+                case DAY:
+                case HOUR:
+                case MINUTE:
+                case SECOND:
+                case MICROSECOND:
+                    return this + "S";
+                default:
+                    return this.toString();
             }
-            return false;
         }
 
         @Override

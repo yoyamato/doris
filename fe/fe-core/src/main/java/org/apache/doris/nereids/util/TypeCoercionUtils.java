@@ -952,7 +952,17 @@ public class TypeCoercionUtils {
         if (!(right.getDataType() instanceof PrimitiveType)) {
             throw new AnalysisException("the second argument must be a scalar type. but it is " + right.toSql());
         }
-        if (!right.getDataType().isIntegerType()) {
+        if (timestampArithmetic.getTimeUnit().isCompositeUnit()) {
+            if (!right.getDataType().isStringLikeType()) {
+                if (!ScalarType.canCastTo((ScalarType) right.getDataType().toCatalogDataType(), Type.VARCHAR)) {
+                    throw new AnalysisException("Operand '" + right.toSql()
+                            + "' of timestamp arithmetic expression '" + timestampArithmetic.toSql()
+                            + "' returns type '" + right.getDataType()
+                            + "' which is incompatible with expected type 'STRING'.");
+                }
+                right = castIfNotSameType(right, VarcharType.SYSTEM_DEFAULT);
+            }
+        } else if (!right.getDataType().isIntegerType()) {
             if (!ScalarType.canCastTo((ScalarType) right.getDataType().toCatalogDataType(), Type.INT)) {
                 throw new AnalysisException("Operand '" + right.toSql()
                         + "' of timestamp arithmetic expression '" + timestampArithmetic.toSql() + "' returns type '"

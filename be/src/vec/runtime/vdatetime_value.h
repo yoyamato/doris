@@ -141,6 +141,11 @@ struct TimeInterval {
     }
 };
 
+// Parse MySQL-style INTERVAL expr by unit (for example: '1:30' HOUR_MINUTE, '-2 10:20:30'
+// DAY_SECOND, '1-2' YEAR_MONTH).
+// Returns true on success and writes parsed fields to `interval`.
+bool parse_mysql_interval(TimeUnit unit, std::string_view expr, TimeInterval* interval);
+
 enum TimeType { TIME_TIME = 1, TIME_DATE = 2, TIME_DATETIME = 3 };
 
 constexpr int SAFE_FORMAT_STRING_MARGIN = 12;
