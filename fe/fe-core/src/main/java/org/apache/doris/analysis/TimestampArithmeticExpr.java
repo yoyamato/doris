@@ -39,6 +39,8 @@ import org.apache.logging.log4j.Logger;
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Describes the addition and subtraction of time units from timestamps.
@@ -64,6 +66,28 @@ public class TimestampArithmeticExpr extends Expr {
     private final boolean intervalFirst;
     private ArithmeticExpr.Operator op;
     private TimeUnit timeUnit;
+    private static final Pattern SECOND_MICROSECOND_PATTERN =
+            Pattern.compile("^(\\d+)\\.(\\d{1,6})$");
+    private static final Pattern MINUTE_SECOND_PATTERN =
+            Pattern.compile("^(\\d+):(\\d+)$");
+    private static final Pattern MINUTE_MICROSECOND_PATTERN =
+            Pattern.compile("^(\\d+):(\\d+)\\.(\\d{1,6})$");
+    private static final Pattern HOUR_MINUTE_PATTERN =
+            Pattern.compile("^(\\d+):(\\d+)$");
+    private static final Pattern HOUR_SECOND_PATTERN =
+            Pattern.compile("^(\\d+):(\\d+):(\\d+)$");
+    private static final Pattern HOUR_MICROSECOND_PATTERN =
+            Pattern.compile("^(\\d+):(\\d+):(\\d+)\\.(\\d{1,6})$");
+    private static final Pattern DAY_HOUR_PATTERN =
+            Pattern.compile("^(\\d+)\\s+(\\d+)$");
+    private static final Pattern DAY_MINUTE_PATTERN =
+            Pattern.compile("^(\\d+)\\s+(\\d+):(\\d+)$");
+    private static final Pattern DAY_SECOND_PATTERN =
+            Pattern.compile("^(\\d+)\\s+(\\d+):(\\d+):(\\d+)$");
+    private static final Pattern DAY_MICROSECOND_PATTERN =
+            Pattern.compile("^(\\d+)\\s+(\\d+):(\\d+):(\\d+)\\.(\\d{1,6})$");
+    private static final Pattern YEAR_MONTH_PATTERN =
+            Pattern.compile("^(\\d+)-(\\d+)$");
 
     // C'tor for function-call like arithmetic, e.g., 'date_add(a, interval b year)'.
     public TimestampArithmeticExpr(String funcName, Expr e1, Expr e2, String timeUnitIdent) {
@@ -235,6 +259,8 @@ public class TimestampArithmeticExpr extends Expr {
                         + "' in timestamp arithmetic expression '" + toSql() + "'.");
             }
 
+            normalizeIntervalExpr(analyzer);
+
             Type dateType = fixType();
             if (dateType.isDate() && timeUnit.isDateTime()) {
                 dateType = Type.DATETIME;
@@ -292,6 +318,196 @@ public class TimestampArithmeticExpr extends Expr {
         if (LOG.isDebugEnabled()) {
             LOG.debug("fn is {} name is {}", fn, funcOpName);
         }
+    }
+
+    private void normalizeIntervalExpr(Analyzer analyzer) throws AnalysisException {
+        if (timeUnit == TimeUnit.QUARTER) {
+            setChild(1, new ArithmeticExpr(ArithmeticExpr.Operator.MULTIPLY, getChild(1), new IntLiteral(3)));
+            getChild(1).analyze(analyzer);
+            timeUnit = TimeUnit.MONTH;
+            return;
+        }
+
+        if (!timeUnit.requiresFormattedInterval()) {
+            return;
+        }
+
+        if (!(getChild(1) instanceof LiteralExpr)) {
+            throw new AnalysisException("Interval expression for unit '" + timeUnit
+                    + "' must be a literal in format " + timeUnit.getExpectedExprFormat());
+        }
+        String intervalExpr = ((LiteralExpr) getChild(1)).getStringValue();
+        int normalized = parseFormattedInterval(intervalExpr, timeUnit);
+        setChild(1, new IntLiteral(normalized));
+        timeUnit = timeUnit.getNormalizedUnit();
+    }
+
+    private static int parseFormattedInterval(String expr, TimeUnit unit) throws AnalysisException {
+        String interval = expr.trim();
+        boolean negative = false;
+        if (interval.startsWith("-")) {
+            negative = true;
+            interval = interval.substring(1).trim();
+        } else if (interval.startsWith("+")) {
+            interval = interval.substring(1).trim();
+        }
+
+        if (interval.isEmpty()) {
+            throw new AnalysisException("Invalid interval literal for unit '" + unit + "': '" + expr + "'");
+        }
+
+        long value;
+        switch (unit) {
+            case SECOND_MICROSECOND:
+                value = parseSecondMicrosecond(interval);
+                break;
+            case MINUTE_MICROSECOND:
+                value = parseMinuteMicrosecond(interval);
+                break;
+            case MINUTE_SECOND:
+                value = parseMinuteSecond(interval);
+                break;
+            case HOUR_MICROSECOND:
+                value = parseHourMicrosecond(interval);
+                break;
+            case HOUR_SECOND:
+                value = parseHourSecond(interval);
+                break;
+            case HOUR_MINUTE:
+                value = parseHourMinute(interval);
+                break;
+            case DAY_MICROSECOND:
+                value = parseDayMicrosecond(interval);
+                break;
+            case DAY_SECOND:
+                value = parseDaySecond(interval);
+                break;
+            case DAY_MINUTE:
+                value = parseDayMinute(interval);
+                break;
+            case DAY_HOUR:
+                value = parseDayHour(interval);
+                break;
+            case YEAR_MONTH:
+                value = parseYearMonth(interval);
+                break;
+            default:
+                throw new AnalysisException("Unsupported formatted interval unit: " + unit);
+        }
+
+        value = negative ? -value : value;
+        if (value > Integer.MAX_VALUE || value < Integer.MIN_VALUE) {
+            throw new AnalysisException("Interval out of range for unit '" + unit + "': " + expr);
+        }
+        return (int) value;
+    }
+
+    private static long parseSecondMicrosecond(String interval) throws AnalysisException {
+        Matcher m = SECOND_MICROSECOND_PATTERN.matcher(interval);
+        if (!m.matches()) {
+            throw formattedIntervalError(TimeUnit.SECOND_MICROSECOND, interval);
+        }
+        return Long.parseLong(m.group(1)) * 1_000_000L + normalizeMicroseconds(m.group(2));
+    }
+
+    private static long parseMinuteMicrosecond(String interval) throws AnalysisException {
+        Matcher m = MINUTE_MICROSECOND_PATTERN.matcher(interval);
+        if (!m.matches()) {
+            throw formattedIntervalError(TimeUnit.MINUTE_MICROSECOND, interval);
+        }
+        return (Long.parseLong(m.group(1)) * 60L + Long.parseLong(m.group(2))) * 1_000_000L
+                + normalizeMicroseconds(m.group(3));
+    }
+
+    private static long parseMinuteSecond(String interval) throws AnalysisException {
+        Matcher m = MINUTE_SECOND_PATTERN.matcher(interval);
+        if (!m.matches()) {
+            throw formattedIntervalError(TimeUnit.MINUTE_SECOND, interval);
+        }
+        return Long.parseLong(m.group(1)) * 60L + Long.parseLong(m.group(2));
+    }
+
+    private static long parseHourMicrosecond(String interval) throws AnalysisException {
+        Matcher m = HOUR_MICROSECOND_PATTERN.matcher(interval);
+        if (!m.matches()) {
+            throw formattedIntervalError(TimeUnit.HOUR_MICROSECOND, interval);
+        }
+        return ((Long.parseLong(m.group(1)) * 60L + Long.parseLong(m.group(2))) * 60L
+                + Long.parseLong(m.group(3))) * 1_000_000L + normalizeMicroseconds(m.group(4));
+    }
+
+    private static long parseHourSecond(String interval) throws AnalysisException {
+        Matcher m = HOUR_SECOND_PATTERN.matcher(interval);
+        if (!m.matches()) {
+            throw formattedIntervalError(TimeUnit.HOUR_SECOND, interval);
+        }
+        return (Long.parseLong(m.group(1)) * 60L + Long.parseLong(m.group(2))) * 60L
+                + Long.parseLong(m.group(3));
+    }
+
+    private static long parseHourMinute(String interval) throws AnalysisException {
+        Matcher m = HOUR_MINUTE_PATTERN.matcher(interval);
+        if (!m.matches()) {
+            throw formattedIntervalError(TimeUnit.HOUR_MINUTE, interval);
+        }
+        return Long.parseLong(m.group(1)) * 60L + Long.parseLong(m.group(2));
+    }
+
+    private static long parseDayMicrosecond(String interval) throws AnalysisException {
+        Matcher m = DAY_MICROSECOND_PATTERN.matcher(interval);
+        if (!m.matches()) {
+            throw formattedIntervalError(TimeUnit.DAY_MICROSECOND, interval);
+        }
+        return ((((Long.parseLong(m.group(1)) * 24L + Long.parseLong(m.group(2))) * 60L
+                + Long.parseLong(m.group(3))) * 60L + Long.parseLong(m.group(4))) * 1_000_000L)
+                + normalizeMicroseconds(m.group(5));
+    }
+
+    private static long parseDaySecond(String interval) throws AnalysisException {
+        Matcher m = DAY_SECOND_PATTERN.matcher(interval);
+        if (!m.matches()) {
+            throw formattedIntervalError(TimeUnit.DAY_SECOND, interval);
+        }
+        return ((Long.parseLong(m.group(1)) * 24L + Long.parseLong(m.group(2))) * 60L
+                + Long.parseLong(m.group(3))) * 60L + Long.parseLong(m.group(4));
+    }
+
+    private static long parseDayMinute(String interval) throws AnalysisException {
+        Matcher m = DAY_MINUTE_PATTERN.matcher(interval);
+        if (!m.matches()) {
+            throw formattedIntervalError(TimeUnit.DAY_MINUTE, interval);
+        }
+        return (Long.parseLong(m.group(1)) * 24L + Long.parseLong(m.group(2))) * 60L
+                + Long.parseLong(m.group(3));
+    }
+
+    private static long parseDayHour(String interval) throws AnalysisException {
+        Matcher m = DAY_HOUR_PATTERN.matcher(interval);
+        if (!m.matches()) {
+            throw formattedIntervalError(TimeUnit.DAY_HOUR, interval);
+        }
+        return Long.parseLong(m.group(1)) * 24L + Long.parseLong(m.group(2));
+    }
+
+    private static long parseYearMonth(String interval) throws AnalysisException {
+        Matcher m = YEAR_MONTH_PATTERN.matcher(interval);
+        if (!m.matches()) {
+            throw formattedIntervalError(TimeUnit.YEAR_MONTH, interval);
+        }
+        return Long.parseLong(m.group(1)) * 12L + Long.parseLong(m.group(2));
+    }
+
+    private static AnalysisException formattedIntervalError(TimeUnit timeUnit, String expr) {
+        return new AnalysisException("Invalid interval literal '" + expr + "' for unit '" + timeUnit
+                + "', expected format " + timeUnit.getExpectedExprFormat());
+    }
+
+    private static long normalizeMicroseconds(String micros) {
+        String normalized = micros;
+        while (normalized.length() < 6) {
+            normalized = normalized + "0";
+        }
+        return Long.parseLong(normalized);
     }
 
     @Override
@@ -354,6 +570,13 @@ public class TimestampArithmeticExpr extends Expr {
                     return TExprOpcode.TIMESTAMP_SECONDS_ADD;
                 } else {
                     return TExprOpcode.TIMESTAMP_SECONDS_SUB;
+                }
+            }
+            case MICROSECOND: {
+                if (op == Operator.ADD) {
+                    return TExprOpcode.TIMESTAMP_MICROSECONDS_ADD;
+                } else {
+                    return TExprOpcode.TIMESTAMP_MICROSECONDS_SUB;
                 }
             }
             default: {
@@ -443,6 +666,7 @@ public class TimestampArithmeticExpr extends Expr {
     public enum TimeUnit {
         YEAR("YEAR"),                               // YEARS
         MONTH("MONTH"),                             // MONTHS
+        QUARTER("QUARTER"),                         // QUARTERS
         WEEK("WEEK"),                               // WEEKS
         DAY("DAY"),                                 // DAYS
         HOUR("HOUR"),                               // HOURS
@@ -467,8 +691,83 @@ public class TimestampArithmeticExpr extends Expr {
             this.description = description;
         }
 
+        public boolean requiresFormattedInterval() {
+            switch (this) {
+                case SECOND_MICROSECOND:
+                case MINUTE_MICROSECOND:
+                case MINUTE_SECOND:
+                case HOUR_MICROSECOND:
+                case HOUR_SECOND:
+                case HOUR_MINUTE:
+                case DAY_MICROSECOND:
+                case DAY_SECOND:
+                case DAY_MINUTE:
+                case DAY_HOUR:
+                case YEAR_MONTH:
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        public TimeUnit getNormalizedUnit() {
+            switch (this) {
+                case SECOND_MICROSECOND:
+                case MINUTE_MICROSECOND:
+                case HOUR_MICROSECOND:
+                case DAY_MICROSECOND:
+                    return MICROSECOND;
+                case MINUTE_SECOND:
+                case HOUR_SECOND:
+                case DAY_SECOND:
+                    return SECOND;
+                case HOUR_MINUTE:
+                case DAY_MINUTE:
+                    return MINUTE;
+                case DAY_HOUR:
+                    return HOUR;
+                case YEAR_MONTH:
+                    return MONTH;
+                default:
+                    return this;
+            }
+        }
+
+        public String getExpectedExprFormat() {
+            switch (this) {
+                case SECOND_MICROSECOND:
+                    return "'SECONDS.MICROSECONDS'";
+                case MINUTE_MICROSECOND:
+                    return "'MINUTES:SECONDS.MICROSECONDS'";
+                case MINUTE_SECOND:
+                    return "'MINUTES:SECONDS'";
+                case HOUR_MICROSECOND:
+                    return "'HOURS:MINUTES:SECONDS.MICROSECONDS'";
+                case HOUR_SECOND:
+                    return "'HOURS:MINUTES:SECONDS'";
+                case HOUR_MINUTE:
+                    return "'HOURS:MINUTES'";
+                case DAY_MICROSECOND:
+                    return "'DAYS HOURS:MINUTES:SECONDS.MICROSECONDS'";
+                case DAY_SECOND:
+                    return "'DAYS HOURS:MINUTES:SECONDS'";
+                case DAY_MINUTE:
+                    return "'DAYS HOURS:MINUTES'";
+                case DAY_HOUR:
+                    return "'DAYS HOURS'";
+                case YEAR_MONTH:
+                    return "'YEARS-MONTHS'";
+                default:
+                    return "numeric";
+            }
+        }
+
         public boolean isDateTime() {
-            if (this == HOUR || this == MINUTE || this == SECOND || this == MICROSECOND) {
+            if (this == HOUR || this == MINUTE || this == SECOND || this == MICROSECOND
+                    || this == SECOND_MICROSECOND || this == MINUTE_MICROSECOND || this == MINUTE_SECOND
+                    || this == HOUR_MICROSECOND || this == HOUR_SECOND || this == HOUR_MINUTE
+                    || this == DAY_MICROSECOND || this == DAY_SECOND || this == DAY_MINUTE
+                    || this == DAY_HOUR) {
                 return true;
             }
             return false;
