@@ -29,6 +29,24 @@ using FunctionAddWeeks = FunctionDateOrDateTimeComputation<AddWeeksImpl<DataType
 using FunctionAddMonths = FunctionDateOrDateTimeComputation<AddMonthsImpl<DataTypeDateTime>>;
 using FunctionAddQuarters = FunctionDateOrDateTimeComputation<AddQuartersImpl<DataTypeDateTime>>;
 using FunctionAddYears = FunctionDateOrDateTimeComputation<AddYearsImpl<DataTypeDateTime>>;
+using FunctionAddSecondMicroseconds =
+        FunctionDateOrDateTimeComputation<AddSecondMicrosecondsImpl<DataTypeDateTime>>;
+using FunctionAddMinuteMicroseconds =
+        FunctionDateOrDateTimeComputation<AddMinuteMicrosecondsImpl<DataTypeDateTime>>;
+using FunctionAddMinuteSeconds =
+        FunctionDateOrDateTimeComputation<AddMinuteSecondsImpl<DataTypeDateTime>>;
+using FunctionAddHourMicroseconds =
+        FunctionDateOrDateTimeComputation<AddHourMicrosecondsImpl<DataTypeDateTime>>;
+using FunctionAddHourSeconds =
+        FunctionDateOrDateTimeComputation<AddHourSecondsImpl<DataTypeDateTime>>;
+using FunctionAddHourMinutes =
+        FunctionDateOrDateTimeComputation<AddHourMinutesImpl<DataTypeDateTime>>;
+using FunctionAddDayMicroseconds =
+        FunctionDateOrDateTimeComputation<AddDayMicrosecondsImpl<DataTypeDateTime>>;
+using FunctionAddDaySeconds = FunctionDateOrDateTimeComputation<AddDaySecondsImpl<DataTypeDateTime>>;
+using FunctionAddDayMinutes = FunctionDateOrDateTimeComputation<AddDayMinutesImpl<DataTypeDateTime>>;
+using FunctionAddDayHours = FunctionDateOrDateTimeComputation<AddDayHoursImpl<DataTypeDateTime>>;
+using FunctionAddYearMonths = FunctionDateOrDateTimeComputation<AddYearMonthsImpl<DataTypeDateTime>>;
 
 using FunctionSubSeconds = FunctionDateOrDateTimeComputation<SubtractSecondsImpl<DataTypeDateTime>>;
 using FunctionSubMinutes = FunctionDateOrDateTimeComputation<SubtractMinutesImpl<DataTypeDateTime>>;
@@ -140,6 +158,17 @@ void register_function_date_time_computation(SimpleFunctionFactory& factory) {
     factory.register_function<FunctionAddMonths>();
     factory.register_function<FunctionAddYears>();
     factory.register_function<FunctionAddQuarters>();
+    factory.register_function<FunctionAddSecondMicroseconds>();
+    factory.register_function<FunctionAddMinuteMicroseconds>();
+    factory.register_function<FunctionAddMinuteSeconds>();
+    factory.register_function<FunctionAddHourMicroseconds>();
+    factory.register_function<FunctionAddHourSeconds>();
+    factory.register_function<FunctionAddHourMinutes>();
+    factory.register_function<FunctionAddDayMicroseconds>();
+    factory.register_function<FunctionAddDaySeconds>();
+    factory.register_function<FunctionAddDayMinutes>();
+    factory.register_function<FunctionAddDayHours>();
+    factory.register_function<FunctionAddYearMonths>();
 
     factory.register_function<FunctionSubSeconds>();
     factory.register_function<FunctionSubMinutes>();

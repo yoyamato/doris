@@ -23,6 +23,7 @@
 #include <algorithm>
 #include <boost/iterator/iterator_facade.hpp>
 #include <cstdint>
+#include <cstdlib>
 #include <memory>
 #include <type_traits>
 #include <utility>
@@ -83,6 +84,109 @@ extern ResultType date_time_add(const Arg& t, Int64 delta, bool& is_null) {
     }
 }
 
+template <TimeUnit unit>
+inline TimeInterval make_composite_interval(Int64 delta) {
+    static_assert(unit == TimeUnit::SECOND_MICROSECOND || unit == TimeUnit::MINUTE_MICROSECOND ||
+                          unit == TimeUnit::MINUTE_SECOND || unit == TimeUnit::HOUR_MICROSECOND ||
+                          unit == TimeUnit::HOUR_SECOND || unit == TimeUnit::HOUR_MINUTE ||
+                          unit == TimeUnit::DAY_MICROSECOND || unit == TimeUnit::DAY_SECOND ||
+                          unit == TimeUnit::DAY_MINUTE || unit == TimeUnit::DAY_HOUR ||
+                          unit == TimeUnit::YEAR_MONTH,
+                  "unit must be composite interval unit");
+    bool is_neg = delta < 0;
+    uint64_t v = std::abs(delta);
+    TimeInterval interval;
+    interval.is_neg = is_neg;
+    if constexpr (unit == TimeUnit::SECOND_MICROSECOND) {
+        interval.microsecond = v % 1000000;
+        interval.second = v / 1000000;
+    } else if constexpr (unit == TimeUnit::MINUTE_MICROSECOND) {
+        interval.microsecond = v % 1000000;
+        v /= 1000000;
+        interval.second = v % 100;
+        interval.minute = v / 100;
+    } else if constexpr (unit == TimeUnit::MINUTE_SECOND) {
+        interval.second = v % 100;
+        interval.minute = v / 100;
+    } else if constexpr (unit == TimeUnit::HOUR_MICROSECOND) {
+        interval.microsecond = v % 1000000;
+        v /= 1000000;
+        interval.second = v % 100;
+        v /= 100;
+        interval.minute = v % 100;
+        interval.hour = v / 100;
+    } else if constexpr (unit == TimeUnit::HOUR_SECOND) {
+        interval.second = v % 100;
+        v /= 100;
+        interval.minute = v % 100;
+        interval.hour = v / 100;
+    } else if constexpr (unit == TimeUnit::HOUR_MINUTE) {
+        interval.minute = v % 100;
+        interval.hour = v / 100;
+    } else if constexpr (unit == TimeUnit::DAY_MICROSECOND) {
+        interval.microsecond = v % 1000000;
+        v /= 1000000;
+        interval.second = v % 100;
+        v /= 100;
+        interval.minute = v % 100;
+        v /= 100;
+        interval.hour = v % 100;
+        interval.day = v / 100;
+    } else if constexpr (unit == TimeUnit::DAY_SECOND) {
+        interval.second = v % 100;
+        v /= 100;
+        interval.minute = v % 100;
+        v /= 100;
+        interval.hour = v % 100;
+        interval.day = v / 100;
+    } else if constexpr (unit == TimeUnit::DAY_MINUTE) {
+        interval.minute = v % 100;
+        v /= 100;
+        interval.hour = v % 100;
+        interval.day = v / 100;
+    } else if constexpr (unit == TimeUnit::DAY_HOUR) {
+        interval.hour = v % 100;
+        interval.day = v / 100;
+    } else if constexpr (unit == TimeUnit::YEAR_MONTH) {
+        interval.month = v % 100;
+        interval.year = v / 100;
+    }
+    return interval;
+}
+
+template <TimeUnit unit, typename DateValueType, typename ResultDateValueType, typename ResultType,
+          typename Arg>
+extern ResultType date_time_add_composite(const Arg& t, Int64 delta, bool& is_null) {
+    auto ts_value = binary_cast<Arg, DateValueType>(t);
+    TimeInterval interval = make_composite_interval<unit>(delta);
+    if constexpr (std::is_same_v<VecDateTimeValue, DateValueType> ||
+                  std::is_same_v<DateValueType, ResultDateValueType>) {
+        is_null = !(ts_value.template date_add_interval<unit>(interval));
+        return binary_cast<ResultDateValueType, ResultType>(ts_value);
+    } else {
+        ResultDateValueType res;
+        is_null = !(ts_value.template date_add_interval<unit>(interval, res));
+        return binary_cast<ResultDateValueType, ResultType>(res);
+    }
+}
+
+template <TimeUnit unit, typename DateValueType, typename ResultDateValueType, typename ResultType,
+          typename Arg>
+extern ResultType date_time_add_dispatch(const Arg& t, Int64 delta, bool& is_null) {
+    if constexpr (unit == TimeUnit::SECOND_MICROSECOND || unit == TimeUnit::MINUTE_MICROSECOND ||
+                  unit == TimeUnit::MINUTE_SECOND || unit == TimeUnit::HOUR_MICROSECOND ||
+                  unit == TimeUnit::HOUR_SECOND || unit == TimeUnit::HOUR_MINUTE ||
+                  unit == TimeUnit::DAY_MICROSECOND || unit == TimeUnit::DAY_SECOND ||
+                  unit == TimeUnit::DAY_MINUTE || unit == TimeUnit::DAY_HOUR ||
+                  unit == TimeUnit::YEAR_MONTH) {
+        return date_time_add_composite<unit, DateValueType, ResultDateValueType, ResultType, Arg>(
+                t, delta, is_null);
+    } else {
+        return date_time_add<unit, DateValueType, ResultDateValueType, ResultType, Arg>(t, delta,
+                                                                                          is_null);
+    }
+}
+
 #define ADD_TIME_FUNCTION_IMPL(CLASS, NAME, UNIT)                                                  \
     template <typename DateType>                                                                   \
     struct CLASS {                                                                                 \
@@ -93,7 +197,16 @@ extern ResultType date_time_add(const Arg& t, Int64 delta, bool& is_null) {
                         std::conditional_t<TimeUnit::UNIT == TimeUnit::HOUR ||                     \
                                                    TimeUnit::UNIT == TimeUnit::MINUTE ||           \
                                                    TimeUnit::UNIT == TimeUnit::SECOND ||           \
-                                                   TimeUnit::UNIT == TimeUnit::SECOND_MICROSECOND, \
+                                                   TimeUnit::UNIT == TimeUnit::SECOND_MICROSECOND || \
+                                                   TimeUnit::UNIT == TimeUnit::MINUTE_MICROSECOND || \
+                                                   TimeUnit::UNIT == TimeUnit::MINUTE_SECOND ||    \
+                                                   TimeUnit::UNIT == TimeUnit::HOUR_MICROSECOND || \
+                                                   TimeUnit::UNIT == TimeUnit::HOUR_SECOND ||      \
+                                                   TimeUnit::UNIT == TimeUnit::HOUR_MINUTE ||      \
+                                                   TimeUnit::UNIT == TimeUnit::DAY_MICROSECOND ||  \
+                                                   TimeUnit::UNIT == TimeUnit::DAY_SECOND ||       \
+                                                   TimeUnit::UNIT == TimeUnit::DAY_MINUTE ||       \
+                                                   TimeUnit::UNIT == TimeUnit::DAY_HOUR,           \
                                            DataTypeDateTimeV2, DataTypeDateV2>,                    \
                         DataTypeDateTimeV2>>;                                                      \
         using ReturnNativeType =                                                                   \
@@ -105,27 +218,36 @@ extern ResultType date_time_add(const Arg& t, Int64 delta, bool& is_null) {
                                                bool& is_null) {                                    \
             if constexpr (std::is_same_v<DateType, DataTypeDate> ||                                \
                           std::is_same_v<DateType, DataTypeDateTime>) {                            \
-                return date_time_add<TimeUnit::UNIT, doris::VecDateTimeValue,                      \
-                                     doris::VecDateTimeValue, ReturnNativeType>(t, delta,          \
-                                                                                is_null);          \
+                return date_time_add_dispatch<TimeUnit::UNIT, doris::VecDateTimeValue,             \
+                                              doris::VecDateTimeValue, ReturnNativeType>(          \
+                        t, delta, is_null);                                                        \
             } else if constexpr (std::is_same_v<DateType, DataTypeDateV2>) {                       \
                 if constexpr (TimeUnit::UNIT == TimeUnit::HOUR ||                                  \
                               TimeUnit::UNIT == TimeUnit::MINUTE ||                                \
                               TimeUnit::UNIT == TimeUnit::SECOND ||                                \
-                              TimeUnit::UNIT == TimeUnit::SECOND_MICROSECOND) {                    \
-                    return date_time_add<TimeUnit::UNIT, DateV2Value<DateV2ValueType>,             \
-                                         DateV2Value<DateTimeV2ValueType>, ReturnNativeType>(      \
+                              TimeUnit::UNIT == TimeUnit::SECOND_MICROSECOND ||                    \
+                              TimeUnit::UNIT == TimeUnit::MINUTE_MICROSECOND ||                    \
+                              TimeUnit::UNIT == TimeUnit::MINUTE_SECOND ||                         \
+                              TimeUnit::UNIT == TimeUnit::HOUR_MICROSECOND ||                      \
+                              TimeUnit::UNIT == TimeUnit::HOUR_SECOND ||                           \
+                              TimeUnit::UNIT == TimeUnit::HOUR_MINUTE ||                           \
+                              TimeUnit::UNIT == TimeUnit::DAY_MICROSECOND ||                       \
+                              TimeUnit::UNIT == TimeUnit::DAY_SECOND ||                            \
+                              TimeUnit::UNIT == TimeUnit::DAY_MINUTE ||                            \
+                              TimeUnit::UNIT == TimeUnit::DAY_HOUR) {                              \
+                    return date_time_add_dispatch<TimeUnit::UNIT, DateV2Value<DateV2ValueType>,    \
+                                                  DateV2Value<DateTimeV2ValueType>, ReturnNativeType>( \
                             t, delta, is_null);                                                    \
                 } else {                                                                           \
-                    return date_time_add<TimeUnit::UNIT, DateV2Value<DateV2ValueType>,             \
-                                         DateV2Value<DateV2ValueType>, ReturnNativeType>(t, delta, \
-                                                                                         is_null); \
+                    return date_time_add_dispatch<TimeUnit::UNIT, DateV2Value<DateV2ValueType>,    \
+                                                  DateV2Value<DateV2ValueType>, ReturnNativeType>( \
+                            t, delta, is_null);                                                    \
                 }                                                                                  \
                                                                                                    \
             } else {                                                                               \
-                return date_time_add<TimeUnit::UNIT, DateV2Value<DateTimeV2ValueType>,             \
-                                     DateV2Value<DateTimeV2ValueType>, ReturnNativeType>(t, delta, \
-                                                                                         is_null); \
+                return date_time_add_dispatch<TimeUnit::UNIT, DateV2Value<DateTimeV2ValueType>,    \
+                                              DateV2Value<DateTimeV2ValueType>, ReturnNativeType>( \
+                        t, delta, is_null);                                                        \
             }                                                                                      \
         }                                                                                          \
                                                                                                    \
@@ -143,6 +265,17 @@ ADD_TIME_FUNCTION_IMPL(AddDaysImpl, days_add, DAY);
 ADD_TIME_FUNCTION_IMPL(AddWeeksImpl, weeks_add, WEEK);
 ADD_TIME_FUNCTION_IMPL(AddMonthsImpl, months_add, MONTH);
 ADD_TIME_FUNCTION_IMPL(AddYearsImpl, years_add, YEAR);
+ADD_TIME_FUNCTION_IMPL(AddSecondMicrosecondsImpl, second_microseconds_add, SECOND_MICROSECOND);
+ADD_TIME_FUNCTION_IMPL(AddMinuteMicrosecondsImpl, minute_microseconds_add, MINUTE_MICROSECOND);
+ADD_TIME_FUNCTION_IMPL(AddMinuteSecondsImpl, minute_seconds_add, MINUTE_SECOND);
+ADD_TIME_FUNCTION_IMPL(AddHourMicrosecondsImpl, hour_microseconds_add, HOUR_MICROSECOND);
+ADD_TIME_FUNCTION_IMPL(AddHourSecondsImpl, hour_seconds_add, HOUR_SECOND);
+ADD_TIME_FUNCTION_IMPL(AddHourMinutesImpl, hour_minutes_add, HOUR_MINUTE);
+ADD_TIME_FUNCTION_IMPL(AddDayMicrosecondsImpl, day_microseconds_add, DAY_MICROSECOND);
+ADD_TIME_FUNCTION_IMPL(AddDaySecondsImpl, day_seconds_add, DAY_SECOND);
+ADD_TIME_FUNCTION_IMPL(AddDayMinutesImpl, day_minutes_add, DAY_MINUTE);
+ADD_TIME_FUNCTION_IMPL(AddDayHoursImpl, day_hours_add, DAY_HOUR);
+ADD_TIME_FUNCTION_IMPL(AddYearMonthsImpl, year_months_add, YEAR_MONTH);
 
 template <typename DateType>
 struct AddQuartersImpl {
