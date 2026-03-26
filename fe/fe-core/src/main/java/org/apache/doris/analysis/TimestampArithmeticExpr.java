@@ -356,6 +356,29 @@ public class TimestampArithmeticExpr extends Expr {
                     return TExprOpcode.TIMESTAMP_SECONDS_SUB;
                 }
             }
+            case SECOND_MICROSECOND:
+            case MINUTE_MICROSECOND:
+            case MINUTE_SECOND:
+            case HOUR_MICROSECOND:
+            case HOUR_SECOND:
+            case HOUR_MINUTE:
+            case DAY_MICROSECOND:
+            case DAY_SECOND:
+            case DAY_MINUTE:
+            case DAY_HOUR: {
+                if (op == Operator.ADD) {
+                    return TExprOpcode.TIMESTAMP_SECONDS_ADD;
+                } else {
+                    return TExprOpcode.TIMESTAMP_SECONDS_SUB;
+                }
+            }
+            case YEAR_MONTH: {
+                if (op == Operator.ADD) {
+                    return TExprOpcode.TIMESTAMP_MONTHS_ADD;
+                } else {
+                    return TExprOpcode.TIMESTAMP_MONTHS_SUB;
+                }
+            }
             default: {
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_TIMEUNIT, timeUnit);
             }
@@ -468,10 +491,12 @@ public class TimestampArithmeticExpr extends Expr {
         }
 
         public boolean isDateTime() {
-            if (this == HOUR || this == MINUTE || this == SECOND || this == MICROSECOND) {
-                return true;
-            }
-            return false;
+            return this == HOUR || this == MINUTE || this == SECOND || this == MICROSECOND
+                    || this == SECOND_MICROSECOND || this == MINUTE_MICROSECOND
+                    || this == MINUTE_SECOND || this == HOUR_MICROSECOND
+                    || this == HOUR_SECOND || this == HOUR_MINUTE
+                    || this == DAY_MICROSECOND || this == DAY_SECOND
+                    || this == DAY_MINUTE || this == DAY_HOUR;
         }
 
         @Override
